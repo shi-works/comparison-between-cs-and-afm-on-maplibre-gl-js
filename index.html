@@ -1,0 +1,612 @@
+<html>
+
+<head>
+    <title>地理院 標高タイル（3D地形）+CS立体図+活断層図（都市圏活断層図）</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.10.0/dist/index.js"></script>
+    <script type="module" src="maplibre-gl-gsi-terrain-fast-png.js"></script>
+    <link href="maplibre-gl-compare.css" rel='stylesheet' />
+    <script src="maplibre-gl-compare.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <style>
+        body {
+            overflow: hidden;
+        }
+
+        body * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        .map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .map-overlay {
+            font: bold 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 250px;
+            bottom: 20px;
+            left: 0;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .map-overlay label {
+            display: block;
+            margin: 0 0 0px;
+            font-size: 12px;
+            top: 100px;
+            left: 10px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .map-overlay input {
+            background-color: transparent;
+            display: inline-block;
+            width: 100%;
+            position: relative;
+            margin: 0;
+            cursor: ew-resize;
+        }
+
+        .corner-text {
+            position: fixed;
+            top: 0;
+            padding: 10px;
+            font-size: 14px;
+            z-index: 1;
+            /* put text above other elements */
+            color: white;
+            /* make sure text is visible on top of other elements */
+            background-color: rgba(0, 0, 0, 0.5);
+            /* semi-transparent background for better visibility */
+        }
+
+        #left-corner {
+            left: 0;
+        }
+
+        #right-corner {
+            right: 0;
+        }
+
+        .legend {
+            background-color: #fff;
+            border-radius: 3px;
+            bottom: 110px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            padding: 10px;
+            position: absolute;
+            left: 10px;
+            z-index: 1;
+            line-height: 16px;
+            height: 80px;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px;
+        }
+
+        .legend div span {
+            border-radius: 50%;
+            display: inline-block;
+            height: 15px;
+            margin-right: 10px;
+            width: 15px;
+            color: orangered
+        }
+
+        .circle {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .legend-png {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            z-index: 1;
+            background: white;
+            padding: 5px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            width: fit-content;
+        }
+
+        .image-container {
+            display: flex;
+            justify-content: center;
+        }
+
+        .legend-png img {
+            width: 87px;
+            height: 196px;
+        }
+    </style>
+    <div id="comparison-container">
+        <div id="left-corner" class="corner-text">CS立体図</div>
+        <div id="right-corner" class="corner-text">活断層図（都市圏活断層図）</div>
+        <div id="before" class="map"></div>
+        <div id="after" class="map"></div>
+    </div>
+    <div class="legend-png">
+        <div class="image-container">
+            <img src="legend.png" alt="Legend" id="legend-image">
+        </div>
+    </div>
+    <script>
+        // protocolの設定
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // マップを初期化
+        const beforeMap = new maplibregl.Map({
+            container: 'before',
+            style: 'std.json',
+            zoom: 5.21,
+            center: [138.638, 38.521],
+            pitch: 0,
+            bearing: 0,
+            attributionControl: false,
+            hash: true,
+        });
+
+        beforeMap.on('load', () => {
+            // 地理院 標高タイルDEM
+            beforeMap.addSource("gsi-dem", {
+                type: 'raster-dem',
+                tiles: [
+                    'gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#dem" target="_blank">地理院タイル（標高タイル）</a>',
+                tileSize: 256
+            });
+
+            ///// 【出典】G空間情報センター /////
+            // 長野県CS立体図ソース
+            beforeMap.addSource("nagano-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://tile.geospatial.jp/CS/VER2/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/nagano-csmap" target="_blank">長野県 CS立体図（ver.2）</a>',
+                tileSize: 256
+            });
+
+            // 長野県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "nagano-cs",
+                type: "raster",
+                source: "nagano-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 高知県CS立体図ソース
+            beforeMap.addSource("kochi-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://rinya-kochi.geospatial.jp/2023/rinya/tile/csmap/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/csmap_kochi" target="_blank">高知県森林資源データ（平成30年度計測）</a>',
+                tileSize: 256
+            });
+
+            // 高知県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "kochi-cs",
+                type: "raster",
+                source: "kochi-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 栃木県CS立体図ソース
+            beforeMap.addSource("tochigi-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://rinya-tochigi.geospatial.jp/2023/rinya/tile/csmap/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/csmap_tochigi" target="_blank">栃木県森林資源データ（令和３～４年度計測）</a>',
+                tileSize: 256
+            });
+
+            // 栃木県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "tochigi-cs",
+                type: "raster",
+                source: "tochigi-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 兵庫県CS立体図ソース
+            beforeMap.addSource("hyogo-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://rinya-hyogo.geospatial.jp/2023/rinya/tile/csmap/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/csmap_hyogo" target="_blank">兵庫県50㎝メッシュCS立体図</a>',
+                tileSize: 256
+            });
+
+            // 兵庫県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "hyogo-cs",
+                type: "raster",
+                source: "hyogo-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 岐阜県CS立体図ソース
+            // タイル配信元【open-hinata】https://kenzkenz.xsrv.jp/open-hinata/open-hinata.html
+            beforeMap.addSource("gifu-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://kenzkenz2.xsrv.jp/gihucs/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/cs-2022-geotiff" target="_blank">岐阜県CS立体図</a>',
+                tileSize: 256,
+                scheme: "tms"
+            });
+
+            // 岐阜県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "gifu-cs",
+                type: "raster",
+                source: "gifu-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 静岡県CS立体図ソース
+            // タイル配信元【open-hinata】https://kenzkenz.xsrv.jp/open-hinata/open-hinata.html
+            beforeMap.addSource("shizuoka-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://mtile.pref.miyazaki.lg.jp/tile/cssizuoka/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www.geospatial.jp/ckan/dataset/shizuokakencsmap2" target="_blank">静岡県CS立体図</a>',
+                tileSize: 256,
+                scheme: "tms"
+            });
+
+            // 静岡県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "shizuoka-cs",
+                type: "raster",
+                source: "shizuoka-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            ///// 【出典】森林総合研究所 森林土壌デジタルマップ /////
+            // 広島県CS立体図ソース
+            beforeMap.addSource("hiroshima-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://www2.ffpri.go.jp/soilmap/tile/cs_hiroshima/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www2.ffpri.go.jp/soilmap/data-src.html" target="_blank">森林総合研究所 CS立体図</a>',
+                tileSize: 256
+            });
+
+            // 広島県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "hiroshima-cs",
+                type: "raster",
+                source: "hiroshima-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 岡山県CS立体図ソース
+            beforeMap.addSource("okayama-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://www2.ffpri.go.jp/soilmap/tile/cs_okayama/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www2.ffpri.go.jp/soilmap/data-src.html" target="_blank">森林総合研究所 CS立体図</a>',
+                tileSize: 256
+            });
+
+            // 岡山県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "okayama-cs",
+                type: "raster",
+                source: "okayama-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 愛媛県CS立体図ソース
+            beforeMap.addSource("ehime-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://www2.ffpri.go.jp/soilmap/tile/cs_ehime/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www2.ffpri.go.jp/soilmap/data-src.html" target="_blank">森林総合研究所 CS立体図</a>',
+                tileSize: 256
+            });
+
+            // 愛媛県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "ehime-cs",
+                type: "raster",
+                source: "ehime-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 福島県CS立体図ソース
+            beforeMap.addSource("fukushima-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://www2.ffpri.go.jp/soilmap/tile/cs_fukushima/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www2.ffpri.go.jp/soilmap/data-src.html" target="_blank">森林総合研究所 CS立体図</a>',
+                tileSize: 256
+            });
+
+            // 福島県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "fukushima-cs",
+                type: "raster",
+                source: "fukushima-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+            // 熊本県・大分県CS立体図ソース
+            beforeMap.addSource("kumamoto-oita-cs", {
+                type: 'raster',
+                tiles: [
+                    'https://www2.ffpri.go.jp/soilmap/tile/cs_kumamoto_oita/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://www2.ffpri.go.jp/soilmap/data-src.html" target="_blank">森林総合研究所 CS立体図</a>',
+                tileSize: 256
+            });
+
+            // 熊本県・大分県CS立体図レイヤ
+            beforeMap.addLayer({
+                id: "kumamoto-oita-cs",
+                type: "raster",
+                source: "kumamoto-oita-cs",
+                minzoom: 0,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1.0
+                },
+            });
+
+        });
+
+        // スケール表示
+        beforeMap.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        /*
+        // フルスクリーンモードのオンオフ
+        beforeMap.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
+        */
+
+        // 3D地形コントロール
+        beforeMap.addControl(
+            new maplibregl.TerrainControl({
+                source: 'gsi-dem',
+                exaggeration: 1 // 標高を強調する倍率
+            }), 'bottom-left'
+        );
+
+        // 現在位置表示
+        beforeMap.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }), 'bottom-left');
+
+        // ズーム・回転
+        beforeMap.addControl(new maplibregl.NavigationControl(), 'bottom-left');
+
+        // Attributionを折りたたみ表示
+        beforeMap.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '<a href="https://twitter.com/shi__works" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/comparison-between-cs-and-afm-on-maplibre-gl-js" target="_blank">Github</a>'
+        }));
+
+        // マップを初期化
+        const afterMap = new maplibregl.Map({
+            container: 'after',
+            style: 'std.json',
+            zoom: 5.21,
+            center: [138.638, 38.521],
+            pitch: 0,
+            bearing: 0,
+            attributionControl: false,
+            hash: true,
+        });
+
+        // マップのロードが完了したら、COGソースを生成しレイヤーに追加
+        afterMap.on('load', () => {
+            // 地理院 標高タイルDEM
+            afterMap.addSource("gsi-dem", {
+                type: 'raster-dem',
+                tiles: [
+                    'gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#dem" target="_blank">地理院タイル（標高タイル）</a>',
+                tileSize: 256
+            });
+
+            // 活断層図（都市圏活断層図）ソース
+            afterMap.addSource("afm", {
+                type: 'raster',
+                tiles: [
+                    'https://cyberjapandata.gsi.go.jp/xyz/afm/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#afm" target="_blank">地理院タイル（活断層図（都市圏活断層図））</a>',
+                tileSize: 256
+            });
+
+            // 活断層図（都市圏活断層図）レイヤ
+            afterMap.addLayer({
+                id: 'afm-tiles',
+                type: 'raster',
+                source: 'afm',
+                minzoom: 1,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 1
+                }
+            });
+
+            /*
+            // 震源ソース
+            afterMap.addSource("hypo", {
+                type: "vector",
+                url: "pmtiles://" + "https://xs489works.xsrv.jp/pmtiles-data/jma-earthquake/hypocenter_convert.pmtiles",
+                attribution: '<a href="https://www.data.jma.go.jp/svd/eqev/data/bulletin/shindo.html">気象庁 地震月報(カタログ編) 震度データを加工して作成</a>'
+            });
+
+            // 震源ポイントレイヤ
+            afterMap.addLayer({
+                'id': 'hypo-points',
+                'type': 'circle',
+                'source': 'hypo',
+                "source-layer": "hypocenter_convertfgb",
+                minzoom: 8,
+                maxzoom: 18,
+                'paint': {
+                    'circle-color': '#FF0000',
+                    'circle-radius': 2
+                }
+            });
+            */
+
+        });
+
+        // Attributionを折りたたみ表示
+        afterMap.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '<a href="https://twitter.com/shi__works" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/comparison-between-cs-and-afm-on-maplibre-gl-js" target="_blank">Github</a>'
+        }));
+
+        /*
+        // フルスクリーンモードのオンオフ
+        afterMap.addControl(new maplibregl.FullscreenControl(), 'bottom-right');
+        */
+
+        // 3D地形コントロール
+        afterMap.addControl(
+            new maplibregl.TerrainControl({
+                source: 'gsi-dem',
+                exaggeration: 1 // 標高を強調する倍率
+            }), 'bottom-right'
+        );
+
+        // 現在位置表示
+        afterMap.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }), 'bottom-right');
+
+        // ズーム・回転
+        afterMap.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+        var container = "#comparison-container";
+        var map = new maplibregl.Compare(beforeMap, afterMap, container, {
+        });
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // ID 'legend-image' を持つ要素を取得
+            const legendImage = document.getElementById('legend-image');
+
+            // 画像がクリックされたときのイベントリスナーを追加
+            legendImage.addEventListener('click', function () {
+                // 新しいウィンドウを開いて、画像を表示
+                const newWindow = window.open('', '_blank');
+                newWindow.document.write('<html><head><title>Legend</title></head><body>');
+                newWindow.document.write('<img src="' + legendImage.src + '" alt="Legend">');
+                newWindow.document.write('</body></html>');
+                newWindow.document.close();
+            });
+        });
+
+    </script>
+</body>
+
+</html>
