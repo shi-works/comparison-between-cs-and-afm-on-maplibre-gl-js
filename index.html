@@ -49,9 +49,9 @@
         .map-overlay {
             font: bold 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
             position: absolute;
-            width: 250px;
+            width: 180px;
             bottom: 20px;
-            left: 0;
+            left: 40px;
             padding: 10px;
         }
 
@@ -162,6 +162,12 @@
         <div id="right-corner" class="corner-text">活断層図（都市圏活断層図）</div>
         <div id="before" class="map"></div>
         <div id="after" class="map"></div>
+    </div>
+    <div class="map-overlay top">
+        <div class="map-overlay-inner">
+            <label>タイル 不透明度: <span id="slider-opacity-value">100%</span></label>
+            <input id="slider-opacity" type="range" min="0" max="100" step="1" value="100">
+        </div>
     </div>
     <div class="legend-png">
         <div class="image-container">
@@ -604,6 +610,74 @@
                 newWindow.document.write('</body></html>');
                 newWindow.document.close();
             });
+        });
+
+        // スライダーで各種タイルの不透明度を制御
+        const sliderOpactiy = document.getElementById('slider-opacity');
+        const sliderOpactiyValue = document.getElementById('slider-opacity-value');
+
+        sliderOpactiy.addEventListener('input', (e) => {
+            beforeMap.setPaintProperty(
+                'nagano-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'kochi-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'tochigi-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'hyogo-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'gifu-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'shizuoka-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'hiroshima-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'okayama-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'ehime-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'fukushima-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            beforeMap.setPaintProperty(
+                'kumamoto-oita-cs',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            afterMap.setPaintProperty(
+                'afm-tiles',
+                'raster-opacity',
+                parseInt(e.target.value, 10) / 100
+            );
+            sliderOpactiyValue.textContent = e.target.value + '%';
         });
 
     </script>
